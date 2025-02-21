@@ -344,48 +344,63 @@
         });
     }
 
-    function updateCreature() {
-        if (creatureShootDelay > 0) {
-            creatureShootDelay--;
-            creature.bullets = [];
-            return;
-        }
+function updateCreature() {
+    if (creatureShootDelay > 0) {
+        creatureShootDelay--;
+        creature.bullets = [];
+        return;
+    }
 
-        creature.lastShot++;
-        if (creature.lastShot >= creature.shootInterval && creature.alive && creature.bullets.length < 3) {
-            const randomInterval = 300 + Math.floor(Math.random() * 601);
-            if (creature.lastShot >= randomInterval) {
-                const dx = player.x - creature.x;
-                const dy = player.y - creature.y;
-                creature.targetAngle = Math.atan2(dy, dx);
-                creature.rotating = true;
+    creature.lastShot++;
+    if (creature.lastShot >= creature.shootInterval && creature.alive && creature.bullets.length < 3) {
+        const randomInterval = 300 + Math.floor(Math.random() * 601);
+        if (creature.lastShot >= randomInterval) {
+            const dx = player.x - creature.x;
+            const dy = player.y - creature.y;
+            creature.targetAngle = Math.atan2(dy, dx);
+            creature.rotating = true;
 
-                if (Math.abs(creature.angle - creature.targetAngle) < 0.01) {
-                    creature.rotating = false;
-                    creature.angle = creature.targetAngle;
+            if (Math.abs(creature.angle - creature.targetAngle) < 0.01) {
+                creature.rotating = false;
+                creature.angle = creature.targetAngle;
 
-                    const variation = (Math.random() - 0.5) * 0.3;
-                    const angle = creature.angle + variation;
-                    const bulletSpeed = 0.75 * (1.0 + (level - 1) * 0.1) * 2;
+                const baseAngle = creature.angle;
+                const angleVariation = (Math.random() - 0.5) * (Math.PI / 1.2);
+                const initialAngle = baseAngle + angleVariation;
 
-                    creature.bullets.push({
-                        x: creature.x,
-                        y: creature.y,
-                        dx: Math.cos(angle) * bulletSpeed,
-                        dy: Math.sin(angle) * bulletSpeed,
-                        size: 12,
-                        homing: true,
-                        angle: 0,
-                        initialSpeed: bulletSpeed
-                    });
-                    creature.lastShot = 0;
-                    if (swooshSound) swooshSound.play();
-                }
+                const bulletSpeed = 0.75 * (1.0 + (level - 1) * 0.1) * 2;
+                const distanceToPlayer = Math.sqrt(dx * dx + dy * dy);
+                const travelDistance = distanceToPlayer * 0.5; // 20% of distance to player
+
+                creature.bullets.push({
+                    x: creature.x,
+                    y: creature.y,
+                    dx: Math.cos(initialAngle) * bulletSpeed,
+                    dy: Math.sin(initialAngle) * bulletSpeed,
+                    size: 12,
+                    homing: true,
+                    angle: 0,
+                    initialSpeed: bulletSpeed,
+                    travelDistance: travelDistance, // Distance to travel at initial angle
+                    distanceTraveled: 0 // Track how far it has gone
+                });
+                creature.lastShot = 0;
+                if (swooshSound) swooshSound.play();
             }
         }
+    }
 
-        creature.bullets.forEach(bullet => {
-            if (bullet.homing) {
+    creature.bullets.forEach(bullet => {
+        if (bullet.homing) {
+            const bulletSpeed = Math.sqrt(bullet.dx * bullet.dx + bullet.dy * bullet.dy); // Current speed
+            bullet.distanceTraveled += bulletSpeed; // Increment distance traveled
+
+            if (bullet.distanceTraveled < bullet.travelDistance) {
+                // Continue moving along initial angle
+                bullet.x += bullet.dx;
+                bullet.y += bullet.dy;
+            } else {
+                // Switch to homing behavior after reaching travelDistance
                 const dx = player.x - bullet.x;
                 const dy = player.y - bullet.y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
@@ -398,40 +413,41 @@
                 }
                 bullet.x += bullet.dx;
                 bullet.y += bullet.dy;
-                bullet.angle += 0.1;
             }
-        });
-
-        creature.bullets = creature.bullets.filter(b => {
-            return b.x >= 0 && b.x <= canvas.width && b.y >= 0 && b.y <= canvas.height;
-        });
-
-        let angleDiff = creature.targetAngle - creature.angle;
-        let shortestAngle = ((angleDiff + Math.PI) % (2 * Math.PI)) - Math.PI;
-        if (shortestAngle > Math.PI) shortestAngle -= 2 * Math.PI;
-        else if (shortestAngle < -Math.PI) shortestAngle += 2 * Math.PI;
-
-        if (creature.rotating) {
-            const rotationStep = creature.rotationSpeed;
-            if (Math.abs(shortestAngle) <= rotationStep) {
-                creature.angle = creature.targetAngle;
-                creature.rotating = false;
-            } else {
-                creature.angle += Math.sign(shortestAngle) * rotationStep;
-                creature.angle = ((creature.angle + 2 * Math.PI) % (2 * Math.PI));
-            }
+            bullet.angle += 0.1; // Continue rotating the bullet visually
         }
+    });
 
-        if (debugMode) {
-            const debugText = `
-                Player: x=${player.x.toFixed(2)}, y=${player.y.toFixed(2)}
-                Creature Angle: ${creature.angle.toFixed(2)} rad
-                Target Angle: ${creature.targetAngle.toFixed(2)} rad
-                Shortest Angle: ${shortestAngle.toFixed(2)} rad
-            `;
-            debugInfo.textContent = debugText;
+    creature.bullets = creature.bullets.filter(b => {
+        return b.x >= 0 && b.x <= canvas.width && b.y >= 0 && b.y <= canvas.height;
+    });
+
+    let angleDiff = creature.targetAngle - creature.angle;
+    let shortestAngle = ((angleDiff + Math.PI) % (2 * Math.PI)) - Math.PI;
+    if (shortestAngle > Math.PI) shortestAngle -= 2 * Math.PI;
+    else if (shortestAngle < -Math.PI) shortestAngle += 2 * Math.PI;
+
+    if (creature.rotating) {
+        const rotationStep = creature.rotationSpeed;
+        if (Math.abs(shortestAngle) <= rotationStep) {
+            creature.angle = creature.targetAngle;
+            creature.rotating = false;
+        } else {
+            creature.angle += Math.sign(shortestAngle) * rotationStep;
+            creature.angle = ((creature.angle + 2 * Math.PI) % (2 * Math.PI));
         }
     }
+
+    if (debugMode) {
+        const debugText = `
+            Player: x=${player.x.toFixed(2)}, y=${player.y.toFixed(2)}
+            Creature Angle: ${creature.angle.toFixed(2)} rad
+            Target Angle: ${creature.targetAngle.toFixed(2)} rad
+            Shortest Angle: ${shortestAngle.toFixed(2)} rad
+        `;
+        debugInfo.textContent = debugText;
+    }
+}
 
     function createDebris(type = 'player') {
         const source = type === 'player' ? player : creature;
