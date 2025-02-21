@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Grok 3 Star Castle</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+            background: black; /* Set page background to black */
+        }
+        canvas {
+            display: block;
+            width: 100vw; /* Fill viewport width */
+            height: 100vh; /* Fill viewport height */
+        }
+        #gameInfo {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-family: Arial;
+            font-size: 20px;
+        }
+        #level {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+        }
+        #score {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        #lives {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+        }
+        #winMessage {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: Arial;
+            font-size: 60px;
+            color: #ff0; /* Yellow */
+            text-align: center;
+            display: none;
+            text-shadow: 2px 2px 4px #f00, -2px -2px 4px #00f; /* Red and blue glow */
+        }
+        #gameOverMessage {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: Arial;
+            font-size: 60px;
+            color: #f00; /* Red */
+            text-align: center;
+            display: none;
+            text-shadow: 2px 2px 4px #000, -2px -2px 4px #fff; /* Black and white glow */
+        }
+        #finalScore {
+            font-size: 30px;
+            margin-top: 20px;
+        }
+        #debugInfo {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            color: white;
+            font-family: Arial;
+            font-size: 14px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 5px;
+            display: none;
+        }
+        audio {
+            display: none; /* Hide audio elements */
+        }
+    </style>
+</head>
+<body>
+    <div id="gameInfo">
+        <div id="level">Level: 1</div>
+        <div id="score">Score: 0</div>
+        <div id="lives">Lives: 3</div>
+    </div>
+    <div id="winMessage">Level Complete!</div>
+    <div id="gameOverMessage">Game Over!<div id="finalScore"></div><div id="playAgain">Press P to play again.</div></div>
+    <div id="debugInfo"></div>
+    <canvas id="gameCanvas"></canvas>
+
+    <audio id="thrustSound" src="/audio/thrust_sound.mp3"></audio>
+    <audio id="bulletSound" src="/audio/bullet_sound.mp3"></audio>
+    <audio id="swooshSound" src="/audio/swoosh_sound.mp3"></audio>
+    <audio id="bulletHitSound" src="/audio/bullet_hit_sound.mp3"></audio>
+    <audio id="playerExplosionSound" src="/audio/creature_explosion_sound.mp3"></audio>
+    <audio id="creatureExplosionSound" src="/audio/creature_explosion_sound.mp3"></audio>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const levelDisplay = document.getElementById('level');
+    const scoreDisplay = document.getElementById('score');
+    const livesDisplay = document.getElementById('lives');
+    const winMessage = document.getElementById('winMessage');
+    const gameOverMessage = document.getElementById('gameOverMessage');
+    const finalScoreDisplay = document.getElementById('finalScore');
+    const debugInfo = document.getElementById('debugInfo');
+
+    const thrustSound = document.getElementById('thrustSound');
+    const bulletSound = document.getElementById('bulletSound');
+    const swooshSound = document.getElementById('swooshSound');
+    const bulletHitSound = document.getElementById('bulletHitSound');
+    const playerExplosionSound = document.getElementById('playerExplosionSound');
+    const creatureExplosionSound = document.getElementById('creatureExplosionSound');
+
+    function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    const centerAreaRadius = canvas.height * 0.15;
+
+    let score = 0;
+    let level = 1;
+    let lives = 3;
+    let gameRunning = true;
+    let shipDestroyed = false;
+    let debris = [];
+    let explosions = [];
+    let creatureDebris = [];
+    let winTimer = null;
+    let debugMode = false;
+    let creatureShootDelay = 0;
+
+    const stars = [];
+    const starCount = 100;
+    let twinklingStar = null;
+
+    function initializeStars() {
+        for (let i = 0; i < starCount; i++) {
+            stars.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                size: Math.random() * 2 + 1,
+                brightness: Math.random() * 0.5 + 0.2
+            });
+        }
+        twinklingStar = Math.floor(Math.random() * stars.length);
+        setInterval(() => {
+            twinklingStar = Math.floor(Math.random() * stars.length);
+        }, 3000);
+    }
+
+    const player = {
+        x: canvas.width / 2,
+        y: canvas.height * 0.7,
+        angle: 0,
+        speed: 3,
+        size: centerAreaRadius * 0.25,
+        bullets: [],
+        dx: 0,
+        dy: 0,
+        friction: 0.99,
+        lastShot: 0,
+        fireCooldown: 30 //delay between shots on player
+    };
+
+    const rings = [
+        { radius: centerAreaRadius * 0.9, color: '#ff0000', speed: -0.02, segments: Array(15).fill(true) },
+        { radius: centerAreaRadius * 0.7, color: '#00ff00', speed: 0.03, segments: Array(10).fill(true) },
+        { radius: centerAreaRadius * 0.4, color: '#0000ff', speed: -0.04, segments: Array(6).fill(true) }
+    ];
+    let ringAngles = [0, 0, 0];
+
+    const creature = {
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        size: centerAreaRadius * 0.25,
+        bullets: [],
+        lastShot: 0,
+        shootInterval: 900,
+        alive: true,
+        angle: 0,
+        targetAngle: 0,
+        rotating: false,
+        rotationSpeed: 0.05
+    };
+
+    let keys = {
+        left: false,
+        right: false,
+        up: false,
+        down: false,
+        space: false,
+        d: false,
+        p: false
+    };
+
+    document.addEventListener('keydown', (e) => {
+        switch(e.key) {
+            case 'ArrowLeft': keys.left = true; break;
+            case 'ArrowRight': keys.right = true; break;
+            case 'ArrowUp': 
+                keys.up = true; 
+                if (thrustSound) thrustSound.play();
+                break;
+            case 'ArrowDown': 
+                keys.down = true; 
+                if (thrustSound) thrustSound.play();
+                break;
+            case ' ': keys.space = true; break;
+            case 'd': 
+                keys.d = true; 
+                debugMode = true;
+                debugInfo.style.display = 'block';
+                break;
+            case 'p':
+                if (!gameRunning && lives <= 0) {
+                    resetGame();
+                    gameLoop();
+                }
+                break;
+        }
+    });
+
+    document.addEventListener('keyup', (e) => {
+        switch(e.key) {
+            case 'ArrowLeft': keys.left = false; break;
+            case 'ArrowRight': keys.right = false; break;
+            case 'ArrowUp': 
+                keys.up = false; 
+                if (thrustSound) { thrustSound.pause(); thrustSound.currentTime = 0; }
+                break;
+            case 'ArrowDown': 
+                keys.down = false; 
+                if (thrustSound) { thrustSound.pause(); thrustSound.currentTime = 0; }
+                break;
+            case ' ': keys.space = false; break;
+            case 'd': 
+                keys.d = false; 
+                debugMode = false;
+                debugInfo.style.display = 'none';
+                break;
+            case 'p': keys.p = false; break;
+        }
+    });
+
+    function resetGame() {
+        score = 0;
+        level = 1;
+        lives = 3;
+        gameRunning = true;
+        shipDestroyed = false;
+        debris = [];
+        explosions = [];
+        creatureDebris = [];
+        player.bullets = [];
+        creature.bullets = [];
+        player.x = canvas.width / 2;
+        player.y = canvas.height * 0.7;
+        player.angle = 0;
+        player.dx = 0;
+        player.dy = 0;
+        player.lastShot = 0;
+        creature.alive = true;
+        creature.x = canvas.width / 2;
+        creature.y = canvas.height / 2;
+        creature.angle = 0;
+        creature.targetAngle = 0;
+        creature.rotating = false;
+        creature.lastShot = 0;
+        creature.shootInterval = calculateShootInterval(level);
+        creatureShootDelay = 300;
+        rings.forEach(ring => ring.segments.fill(true));
+        ringAngles = [0, 0, 0];
+        updateDisplays();
+        gameOverMessage.style.display = 'none';
+        winMessage.style.display = 'none';
+        if (winTimer) clearTimeout(winTimer);
+        winTimer = null;
+        debugMode = false;
+        debugInfo.style.display = 'none';
+        initializeStars();
+    }
+
+    function updateDisplays() {
+        levelDisplay.textContent = `Level: ${level}`;
+        scoreDisplay.textContent = `Score: ${score}`;
+        livesDisplay.textContent = `Lives: ${lives}`;
+    }
+
+    function calculateShootInterval(currentLevel) {
+        return Math.max(20, 60 - (currentLevel - 1) * 10);
+    }
+
+    function updatePlayer() {
+        if (shipDestroyed || lives <= 0) return;
+
+        if (keys.left) player.angle -= 0.05;
+        if (keys.right) player.angle += 0.05;
+        if (keys.up) {
+            player.dx += Math.cos(player.angle) * 0.2;
+            player.dy += Math.sin(player.angle) * 0.2;
+        }
+        if (keys.down) {
+            player.dx -= Math.cos(player.angle) * 0.2;
+            player.dy -= Math.sin(player.angle) * 0.2;
+        }
+
+        player.x += player.dx;
+        player.y += player.dy;
+        player.dx *= player.friction;
+        player.dy *= player.friction;
+
+        player.x = (player.x + canvas.width) % canvas.width;
+        player.y = (player.y + canvas.height) % canvas.height;
+
+        player.lastShot++;
+        if (keys.space && player.lastShot >= player.fireCooldown) {
+            player.bullets.push({
+                x: player.x + Math.cos(player.angle) * player.size,
+                y: player.y + Math.sin(player.angle) * player.size,
+                dx: Math.cos(player.angle) * 5,
+                dy: Math.sin(player.angle) * 5,
+                size: 4
+            });
+            player.lastShot = 0;
+            if (bulletSound) bulletSound.play();
+        }
+
+        player.bullets = player.bullets.filter(b => {
+            b.x += b.dx;
+            b.y += b.dy;
+            return b.x >= 0 && b.x <= canvas.width && b.y >= 0 && b.y <= canvas.height;
+        });
+    }
+
+    function updateCreature() {
+        if (creatureShootDelay > 0) {
+            creatureShootDelay--;
+            creature.bullets = [];
+            return;
+        }
+
+        creature.lastShot++;
+        if (creature.lastShot >= creature.shootInterval && creature.alive && creature.bullets.length < 3) {
+            const randomInterval = 300 + Math.floor(Math.random() * 601);
+            if (creature.lastShot >= randomInterval) {
+                const dx = player.x - creature.x;
+                const dy = player.y - creature.y;
+                creature.targetAngle = Math.atan2(dy, dx);
+                creature.rotating = true;
+
+                if (Math.abs(creature.angle - creature.targetAngle) < 0.01) {
+                    creature.rotating = false;
+                    creature.angle = creature.targetAngle;
+
+                    const variation = (Math.random() - 0.5) * 0.3;
+                    const angle = creature.angle + variation;
+                    const bulletSpeed = 0.75 * (1.0 + (level - 1) * 0.1) * 2;
+
+                    creature.bullets.push({
+                        x: creature.x,
+                        y: creature.y,
+                        dx: Math.cos(angle) * bulletSpeed,
+                        dy: Math.sin(angle) * bulletSpeed,
+                        size: 12,
+                        homing: true,
+                        angle: 0,
+                        initialSpeed: bulletSpeed
+                    });
+                    creature.lastShot = 0;
+                    if (swooshSound) swooshSound.play();
+                }
+            }
+        }
+
+        creature.bullets.forEach(bullet => {
+            if (bullet.homing) {
+                const dx = player.x - bullet.x;
+                const dy = player.y - bullet.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance > 0) {
+                    const levelMultiplier = 1.0 + (level - 1) * 0.1;
+                    const homingSpeed = bullet.initialSpeed / 1.5 * levelMultiplier;
+                    const angle = Math.atan2(dy, dx);
+                    bullet.dx = Math.cos(angle) * homingSpeed;
+                    bullet.dy = Math.sin(angle) * homingSpeed;
+                }
+                bullet.x += bullet.dx;
+                bullet.y += bullet.dy;
+                bullet.angle += 0.1;
+            }
+        });
+
+        creature.bullets = creature.bullets.filter(b => {
+            return b.x >= 0 && b.x <= canvas.width && b.y >= 0 && b.y <= canvas.height;
+        });
+
+        let angleDiff = creature.targetAngle - creature.angle;
+        let shortestAngle = ((angleDiff + Math.PI) % (2 * Math.PI)) - Math.PI;
+        if (shortestAngle > Math.PI) shortestAngle -= 2 * Math.PI;
+        else if (shortestAngle < -Math.PI) shortestAngle += 2 * Math.PI;
+
+        if (creature.rotating) {
+            const rotationStep = creature.rotationSpeed;
+            if (Math.abs(shortestAngle) <= rotationStep) {
+                creature.angle = creature.targetAngle;
+                creature.rotating = false;
+            } else {
+                creature.angle += Math.sign(shortestAngle) * rotationStep;
+                creature.angle = ((creature.angle + 2 * Math.PI) % (2 * Math.PI));
+            }
+        }
+
+        if (debugMode) {
+            const debugText = `
+                Player: x=${player.x.toFixed(2)}, y=${player.y.toFixed(2)}
+                Creature Angle: ${creature.angle.toFixed(2)} rad
+                Target Angle: ${creature.targetAngle.toFixed(2)} rad
+                Shortest Angle: ${shortestAngle.toFixed(2)} rad
+            `;
+            debugInfo.textContent = debugText;
+        }
+    }
+
+    function createDebris(type = 'player') {
+        const source = type === 'player' ? player : creature;
+        for (let i = 0; i < 10; i++) {
+            const debrisPiece = {
+                x: source.x,
+                y: source.y,
+                dx: (Math.random() - 0.5) * 6,
+                dy: (Math.random() - 0.5) * 6,
+                angle: Math.random() * Math.PI * 2,
+                size: Math.random() * (type === 'player' ? player.size / 2 : creature.size / 3) + 5,
+                life: type === 'player' ? 120 : 120,
+                color: type === 'player' ? 'white' : '#gray'
+            };
+            if (type === 'creature') creatureDebris.push(debrisPiece);
+            else debris.push(debrisPiece);
+        }
+    }
+
+    function createExplosion(x, y, size = 5) {
+        explosions.push({
+            x: x,
+            y: y,
+            radius: size,
+            life: 15
+        });
+    }
+
+    function updateDebris() {
+        debris = debris.filter(d => {
+            d.x += d.dx;
+            d.y += d.dy;
+            d.angle += 0.1;
+            d.life--;
+            d.x = (d.x + canvas.width) % canvas.width;
+            d.y = (d.y + canvas.height) % canvas.height;
+            return d.life > 0;
+        });
+    }
+
+    function updateCreatureDebris() {
+        creatureDebris = creatureDebris.filter(d => {
+            d.x += d.dx;
+            d.y += d.dy;
+            d.angle += 0.05;
+            d.life--;
+            d.x = (d.x + canvas.width) % canvas.width;
+            d.y = (d.y + canvas.height) % canvas.height;
+            return d.life > 0;
+        });
+    }
+
+    function updateExplosions() {
+        explosions = explosions.filter(e => {
+            e.life--;
+            e.radius *= 1.1;
+            return e.life > 0;
+        });
+    }
+
+    function drawBackground() {
+        stars.forEach((star, index) => {
+            ctx.fillStyle = index === twinklingStar ? `rgba(255, 255, 255, ${star.brightness * 2})` : `rgba(255, 255, 255, ${star.brightness})`;
+            ctx.beginPath();
+            ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        ctx.beginPath();
+        ctx.arc(canvas.width / 2, canvas.height / 2, centerAreaRadius, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(50, 50, 50, 0.3)';
+        ctx.fill();
+    }
+
+    function drawPlayer() {
+        if (shipDestroyed || lives <= 0) {
+            debris.forEach(d => {
+                ctx.save();
+                ctx.translate(d.x, d.y);
+                ctx.rotate(d.angle);
+                ctx.beginPath();
+                ctx.moveTo(d.size, 0);
+                ctx.lineTo(-d.size / 2, -d.size / 2);
+                ctx.lineTo(-d.size / 2, d.size / 2);
+                ctx.strokeStyle = d.color;
+                ctx.stroke();
+                ctx.restore();
+            });
+        } else {
+            ctx.save();
+            ctx.translate(player.x, player.y);
+            ctx.rotate(player.angle + Math.PI / 2);
+            ctx.beginPath();
+            ctx.moveTo(0, -player.size * 0.6);
+            ctx.lineTo(-player.size * 0.3, player.size * 0.3);
+            ctx.lineTo(-player.size * 0.1, player.size * 0.5);
+            ctx.lineTo(player.size * 0.1, player.size * 0.5);
+            ctx.lineTo(player.size * 0.3, player.size * 0.3);
+            ctx.closePath();
+            ctx.strokeStyle = 'white';
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(-player.size * 0.3, player.size * 0.1);
+            ctx.lineTo(-player.size * 0.6, player.size * 0.1);
+            ctx.moveTo(player.size * 0.3, player.size * 0.1);
+            ctx.lineTo(player.size * 0.6, player.size * 0.1);
+            ctx.stroke();
+
+            if (keys.up) {
+                ctx.beginPath();
+                ctx.moveTo(-player.size * 0.1, player.size * 0.5);
+                ctx.lineTo(0, player.size * 0.8);
+                ctx.lineTo(player.size * 0.1, player.size * 0.5);
+                ctx.fillStyle = 'red';
+                ctx.fill();
+            }
+            if (keys.down) {
+                ctx.beginPath();
+                ctx.moveTo(-player.size * 0.1, player.size * 0.5);
+                ctx.lineTo(0, player.size * 0.8);
+                ctx.lineTo(player.size * 0.1, player.size * 0.5);
+                ctx.fillStyle = 'blue';
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        ctx.fillStyle = 'yellow';
+        player.bullets.forEach(b => {
+            ctx.beginPath();
+            ctx.arc(b.x, b.y, b.size, 0, Math.PI * 2);
+            ctx.fill();
+        });
+    }
+
+    function drawRings() {
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+
+        rings.forEach((ring, rIndex) => {
+            const segmentAngle = (2 * Math.PI) / ring.segments.length;
+            ring.segments.forEach((active, sIndex) => {
+                if (active) {
+                    const startAngle = ringAngles[rIndex] + (sIndex * segmentAngle);
+                    const endAngle = startAngle + segmentAngle;
+                    const startX = centerX + Math.cos(startAngle) * ring.radius;
+                    const startY = centerY + Math.sin(startAngle) * ring.radius;
+                    const endX = centerX + Math.cos(endAngle) * ring.radius;
+                    const endY = centerY + Math.sin(endAngle) * ring.radius;
+
+                    ctx.beginPath();
+                    ctx.moveTo(startX, startY);
+                    ctx.lineTo(endX, endY);
+                    ctx.strokeStyle = ring.color;
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                }
+            });
+            ringAngles[rIndex] += ring.speed;
+        });
+    }
+
+    function drawCreature() {
+        if (creature.alive) {
+            ctx.save();
+            ctx.translate(creature.x, creature.y);
+            ctx.rotate(creature.angle + Math.PI / 2);
+            ctx.strokeStyle = 'white';
+            ctx.beginPath();
+            ctx.moveTo(0, -creature.size * 0.6);
+            ctx.lineTo(-creature.size * 0.3, creature.size * 0.3);
+            ctx.lineTo(-creature.size * 0.1, creature.size * 0.5);
+            ctx.lineTo(creature.size * 0.1, creature.size * 0.5);
+            ctx.lineTo(creature.size * 0.3, creature.size * 0.3);
+            ctx.closePath();
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(0, -creature.size * 0.6);
+            ctx.lineTo(-creature.size * 0.1, -creature.size * 0.4);
+            ctx.lineTo(creature.size * 0.1, -creature.size * 0.4);
+            ctx.closePath();
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(-creature.size * 0.3, creature.size * 0.1);
+            ctx.lineTo(-creature.size * 0.6, creature.size * 0.1);
+            ctx.moveTo(creature.size * 0.3, creature.size * 0.1);
+            ctx.lineTo(creature.size * 0.6, creature.size * 0.1);
+            ctx.stroke();
+
+            ctx.fillStyle = 'orange';
+            ctx.beginPath();
+            ctx.arc(-creature.size * 0.1, creature.size * 0.5, creature.size * 0.1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(creature.size * 0.1, creature.size * 0.5, creature.size * 0.1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        ctx.strokeStyle = 'fuchsia';
+        ctx.fillStyle = 'rgba(255, 0, 255, 0.5)';
+        creature.bullets.forEach(b => {
+            if (b.homing) {
+                ctx.save();
+                ctx.translate(b.x, b.y);
+                ctx.rotate(b.angle);
+                ctx.beginPath();
+                for (let i = 0; i < 6; i++) {
+                    const angle = (i * Math.PI / 3);
+                    const outerRadius = b.size;
+                    const innerRadius = outerRadius / 2;
+                    const outerX = Math.cos(angle) * outerRadius;
+                    const outerY = Math.sin(angle) * outerRadius;
+                    const innerX = Math.cos(angle + Math.PI / 6) * innerRadius;
+                    const innerY = Math.sin(angle + Math.PI / 6) * innerRadius;
+                    if (i === 0) ctx.moveTo(outerX, outerY);
+                    else ctx.lineTo(outerX, outerY);
+                    ctx.lineTo(innerX, innerY);
+                }
+                ctx.closePath();
+                ctx.stroke();
+                ctx.fill();
+                ctx.restore();
+            }
+        });
+    }
+
+    function drawCreatureDebris() {
+        ctx.fillStyle = '#gray';
+        creatureDebris.forEach(d => {
+            ctx.save();
+            ctx.translate(d.x, d.y);
+            ctx.rotate(d.angle);
+            ctx.beginPath();
+            ctx.moveTo(d.size, 0);
+            ctx.lineTo(-d.size / 2, -d.size / 2);
+            ctx.lineTo(-d.size / 2, d.size / 2);
+            ctx.fill();
+            ctx.restore();
+        });
+    }
+
+    function drawExplosions() {
+        ctx.fillStyle = 'red';
+        explosions.forEach(e => {
+            ctx.beginPath();
+            ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
+            ctx.fill();
+        });
+    }
+
+    function checkCollisions() {
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+
+        if (!shipDestroyed && lives > 0) {
+            const distance = Math.sqrt((player.x - centerX) ** 2 + (player.y - centerY) ** 2);
+            if (distance < centerAreaRadius + player.size) {
+                const normalX = (player.x - centerX) / distance;
+                const normalY = (player.y - centerY) / distance;
+                const dot = player.dx * normalX + player.dy * normalY;
+                player.dx -= 2 * dot * normalX;
+                player.dy -= 2 * dot * normalY;
+                const overlap = (centerAreaRadius + player.size) - distance;
+                player.x += normalX * overlap;
+                player.y += normalY * overlap;
+            }
+
+            player.bullets.forEach((bullet, bIndex) => {
+                let hitRing = false;
+                rings.forEach((ring, rIndex) => {
+                    const segmentAngle = (2 * Math.PI) / ring.segments.length;
+                    ring.segments.forEach((active, sIndex) => {
+                        if (active) {
+                            const startAngle = ringAngles[rIndex] + (sIndex * segmentAngle);
+                            const endAngle = startAngle + segmentAngle;
+                            const startX = centerX + Math.cos(startAngle) * ring.radius;
+                            const startY = centerY + Math.sin(startAngle) * ring.radius;
+                            const endX = centerX + Math.cos(endAngle) * ring.radius;
+                            const endY = centerY + Math.sin(endAngle) * ring.radius;
+
+                            const dx1 = bullet.x - startX;
+                            const dy1 = bullet.y - startY;
+                            const dx2 = endX - startX;
+                            const dy2 = endY - startY;
+                            const len = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+                            const t = Math.max(0, Math.min(1, (dx1 * dx2 + dy1 * dy2) / (len * len)));
+                            const closestX = startX + t * dx2;
+                            const closestY = startY + t * dy2;
+                            const dist = Math.sqrt((bullet.x - closestX) ** 2 + (bullet.y - closestY) ** 2);
+
+                            if (dist < 10) {
+                                ring.segments[sIndex] = false;
+                                player.bullets.splice(bIndex, 1);
+                                score += 10;
+                                scoreDisplay.textContent = `Score: ${score}`;
+                                hitRing = true;
+                                createExplosion(closestX, closestY);
+                                return;
+                            }
+                        }
+                    });
+                });
+
+                if (!hitRing && creature.alive) {
+                    const dx = bullet.x - creature.x;
+                    const dy = bullet.y - creature.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance < creature.size) {
+                        creature.alive = false;
+                        player.bullets.splice(bIndex, 1);
+                        score += 100;
+                        updateDisplays();
+                        createDebris('creature');
+                        createExplosion(creature.x, creature.y);
+                        if (creatureExplosionSound) creatureExplosionSound.play();
+                        levelUp();
+                    }
+                }
+
+                creature.bullets.forEach((cBullet, cIndex) => {
+                    if (cBullet.homing) {
+                        const bDx = bullet.x - cBullet.x;
+                        const bDy = bullet.y - cBullet.y;
+                        const bDistance = Math.sqrt(bDx * bDx + bDy * bDy);
+                        if (bDistance < (bullet.size + cBullet.size)) {
+                            player.bullets.splice(bIndex, 1);
+                            creature.bullets.splice(cIndex, 1);
+                            score += 5;
+                            scoreDisplay.textContent = `Score: ${score}`;
+                            createExplosion(cBullet.x, cBullet.y, 3);
+                            if (bulletHitSound) bulletHitSound.play();
+                        }
+                    }
+                });
+            });
+
+            creature.bullets.forEach((bullet, index) => {
+                const dx = bullet.x - player.x;
+                const dy = bullet.y - player.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance < player.size + bullet.size) {
+                    lives--;
+                    updateDisplays();
+                    if (lives <= 0) {
+                        shipDestroyed = true;
+                        createDebris();
+                        creature.bullets.splice(index, 1);
+                        player.dx = 0;
+                        player.dy = 0;
+                        if (playerExplosionSound) playerExplosionSound.play();
+                        setTimeout(() => {
+                            gameRunning = false;
+                            showGameOver();
+                        }, 1000);
+                    } else {
+                        shipDestroyed = true;
+                        createDebris();
+                        creature.bullets.splice(index, 1);
+                        player.dx = 0;
+                        player.dy = 0;
+                        if (playerExplosionSound) playerExplosionSound.play();
+                        setTimeout(() => {
+                            shipDestroyed = false;
+                            player.x = canvas.width / 2;
+                            player.y = canvas.height * 0.7;
+                            player.dx = 0;
+                            player.dy = 0;
+                            creatureShootDelay = 300;
+                        }, 1000);
+                    }
+                }
+            });
+        }
+    }
+
+    function levelUp() {
+        level++;
+        updateDisplays();
+        creature.alive = false;
+        creature.bullets = [];
+        player.bullets = [];
+        
+        setTimeout(() => {
+            creature.alive = true;
+            creature.angle = 0;
+            creature.targetAngle = 0;
+            creature.rotating = false;
+            rings.forEach(ring => ring.segments.fill(true));
+            creatureDebris = [];
+            creature.shootInterval = calculateShootInterval(level);
+            creatureShootDelay = 300;
+            winMessage.style.display = 'block';
+            winTimer = setTimeout(() => {
+                winMessage.style.display = 'none';
+                gameRunning = true;
+            }, 3000);
+        }, 2000);
+    }
+
+    function showGameOver() {
+        finalScoreDisplay.textContent = `Final Score: ${score}`;
+        gameOverMessage.style.display = 'block';
+        gameRunning = false;
+    }
+
+    function gameLoop() {
+        if (!gameRunning) return;
+
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        drawBackground();
+        updatePlayer();
+        updateCreature();
+        updateDebris();
+        updateCreatureDebris();
+        updateExplosions();
+        drawRings();
+        if (creature.alive) drawCreature();
+        drawCreatureDebris();
+        drawExplosions();
+        drawPlayer();
+        checkCollisions();
+
+        requestAnimationFrame(gameLoop);
+    }
+
+    initializeStars();
+    resetGame();
+    gameLoop();
+</script>
+</body>
+</html>
