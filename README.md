@@ -8,5 +8,6 @@ Use the Arrow keys to move the ship, spacebar to shoot
 
 Break the outer rings to eventually kill the inner space ship but watch out! It will shoot at you too. 
 
+Play the game here: https://marcpope.com/starcastle.html
 
 Sound FX by: https://pixabay.com/
