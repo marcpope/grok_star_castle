@@ -171,7 +171,7 @@
         dy: 0,
         friction: 0.99,
         lastShot: 0,
-        fireCooldown: 30 //delay between shots on player
+        fireCooldown: 30
     };
 
     const rings = [
@@ -210,12 +210,16 @@
             case 'ArrowLeft': keys.left = true; break;
             case 'ArrowRight': keys.right = true; break;
             case 'ArrowUp': 
+            case 'a': 
+            case 'A': 
                 keys.up = true; 
-                if (thrustSound) thrustSound.play();
+                if (thrustSound) thrustSound.play(); 
                 break;
             case 'ArrowDown': 
+            case 'z': 
+            case 'Z': 
                 keys.down = true; 
-                if (thrustSound) thrustSound.play();
+                if (thrustSound) thrustSound.play(); 
                 break;
             case ' ': keys.space = true; break;
             case 'd': 
@@ -237,10 +241,14 @@
             case 'ArrowLeft': keys.left = false; break;
             case 'ArrowRight': keys.right = false; break;
             case 'ArrowUp': 
+            case 'a': 
+            case 'A': 
                 keys.up = false; 
                 if (thrustSound) { thrustSound.pause(); thrustSound.currentTime = 0; }
                 break;
             case 'ArrowDown': 
+            case 'z': 
+            case 'Z': 
                 keys.down = false; 
                 if (thrustSound) { thrustSound.pause(); thrustSound.currentTime = 0; }
                 break;
@@ -307,11 +315,11 @@
 
         if (keys.left) player.angle -= 0.05;
         if (keys.right) player.angle += 0.05;
-        if (keys.up) {
+        if (keys.up) { // Forward thrust (Up or A)
             player.dx += Math.cos(player.angle) * 0.2;
             player.dy += Math.sin(player.angle) * 0.2;
         }
-        if (keys.down) {
+        if (keys.down) { // Reverse thrust (Down or Z)
             player.dx -= Math.cos(player.angle) * 0.2;
             player.dy -= Math.sin(player.angle) * 0.2;
         }
@@ -344,110 +352,108 @@
         });
     }
 
-function updateCreature() {
-    if (creatureShootDelay > 0) {
-        creatureShootDelay--;
-        creature.bullets = [];
-        return;
-    }
-
-    creature.lastShot++;
-    if (creature.lastShot >= creature.shootInterval && creature.alive && creature.bullets.length < 3) {
-        const randomInterval = 300 + Math.floor(Math.random() * 601);
-        if (creature.lastShot >= randomInterval) {
-            const dx = player.x - creature.x;
-            const dy = player.y - creature.y;
-            creature.targetAngle = Math.atan2(dy, dx);
-            creature.rotating = true;
-
-            if (Math.abs(creature.angle - creature.targetAngle) < 0.01) {
-                creature.rotating = false;
-                creature.angle = creature.targetAngle;
-
-                const baseAngle = creature.angle;
-                const angleVariation = (Math.random() - 0.5) * (Math.PI / 1.2);
-                const initialAngle = baseAngle + angleVariation;
-
-                const bulletSpeed = 0.75 * (1.0 + (level - 1) * 0.1) * 2;
-                const distanceToPlayer = Math.sqrt(dx * dx + dy * dy);
-                const travelDistance = distanceToPlayer * 0.5; // 20% of distance to player
-
-                creature.bullets.push({
-                    x: creature.x,
-                    y: creature.y,
-                    dx: Math.cos(initialAngle) * bulletSpeed,
-                    dy: Math.sin(initialAngle) * bulletSpeed,
-                    size: 12,
-                    homing: true,
-                    angle: 0,
-                    initialSpeed: bulletSpeed,
-                    travelDistance: travelDistance, // Distance to travel at initial angle
-                    distanceTraveled: 0 // Track how far it has gone
-                });
-                creature.lastShot = 0;
-                if (swooshSound) swooshSound.play();
-            }
+    function updateCreature() {
+        if (creatureShootDelay > 0) {
+            creatureShootDelay--;
+            creature.bullets = [];
+            return;
         }
-    }
 
-    creature.bullets.forEach(bullet => {
-        if (bullet.homing) {
-            const bulletSpeed = Math.sqrt(bullet.dx * bullet.dx + bullet.dy * bullet.dy); // Current speed
-            bullet.distanceTraveled += bulletSpeed; // Increment distance traveled
+        creature.lastShot++;
+        if (creature.lastShot >= creature.shootInterval && creature.alive && creature.bullets.length < 3) {
+            const randomInterval = 300 + Math.floor(Math.random() * 601);
+            if (creature.lastShot >= randomInterval) {
+                const dx = player.x - creature.x;
+                const dy = player.y - creature.y;
+                creature.targetAngle = Math.atan2(dy, dx);
+                creature.rotating = true;
 
-            if (bullet.distanceTraveled < bullet.travelDistance) {
-                // Continue moving along initial angle
-                bullet.x += bullet.dx;
-                bullet.y += bullet.dy;
-            } else {
-                // Switch to homing behavior after reaching travelDistance
-                const dx = player.x - bullet.x;
-                const dy = player.y - bullet.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                if (distance > 0) {
-                    const levelMultiplier = 1.0 + (level - 1) * 0.1;
-                    const homingSpeed = bullet.initialSpeed / 1.5 * levelMultiplier;
-                    const angle = Math.atan2(dy, dx);
-                    bullet.dx = Math.cos(angle) * homingSpeed;
-                    bullet.dy = Math.sin(angle) * homingSpeed;
+                if (Math.abs(creature.angle - creature.targetAngle) < 0.01) {
+                    creature.rotating = false;
+                    creature.angle = creature.targetAngle;
+
+                    const baseAngle = creature.angle;
+                    const angleVariation = (Math.random() - 0.5) * (Math.PI / 1.8); // ±50 degrees
+                    const initialAngle = baseAngle + angleVariation;
+
+                    const bulletSpeed = 0.75 * (1.0 + (level - 1) * 0.1) * 2;
+                    const distanceToPlayer = Math.sqrt(dx * dx + dy * dy);
+                    const travelDistance = distanceToPlayer * 0.2;
+
+                    creature.bullets.push({
+                        x: creature.x,
+                        y: creature.y,
+                        dx: Math.cos(initialAngle) * bulletSpeed,
+                        dy: Math.sin(initialAngle) * bulletSpeed,
+                        size: 12,
+                        homing: true,
+                        angle: 0,
+                        initialSpeed: bulletSpeed,
+                        travelDistance: travelDistance,
+                        distanceTraveled: 0
+                    });
+                    creature.lastShot = 0;
+                    if (swooshSound) swooshSound.play();
                 }
-                bullet.x += bullet.dx;
-                bullet.y += bullet.dy;
             }
-            bullet.angle += 0.1; // Continue rotating the bullet visually
         }
-    });
 
-    creature.bullets = creature.bullets.filter(b => {
-        return b.x >= 0 && b.x <= canvas.width && b.y >= 0 && b.y <= canvas.height;
-    });
+        creature.bullets.forEach(bullet => {
+            if (bullet.homing) {
+                const bulletSpeed = Math.sqrt(bullet.dx * bullet.dx + bullet.dy * bullet.dy);
+                bullet.distanceTraveled += bulletSpeed;
 
-    let angleDiff = creature.targetAngle - creature.angle;
-    let shortestAngle = ((angleDiff + Math.PI) % (2 * Math.PI)) - Math.PI;
-    if (shortestAngle > Math.PI) shortestAngle -= 2 * Math.PI;
-    else if (shortestAngle < -Math.PI) shortestAngle += 2 * Math.PI;
+                if (bullet.distanceTraveled < bullet.travelDistance) {
+                    bullet.x += bullet.dx;
+                    bullet.y += bullet.dy;
+                } else {
+                    const dx = player.x - bullet.x;
+                    const dy = player.y - bullet.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance > 0) {
+                        const levelMultiplier = 1.0 + (level - 1) * 0.1;
+                        const homingSpeed = bullet.initialSpeed / 1.5 * levelMultiplier;
+                        const angle = Math.atan2(dy, dx);
+                        bullet.dx = Math.cos(angle) * homingSpeed;
+                        bullet.dy = Math.sin(angle) * homingSpeed;
+                    }
+                    bullet.x += bullet.dx;
+                    bullet.y += bullet.dy;
+                }
+                bullet.angle += 0.1;
+            }
+        });
 
-    if (creature.rotating) {
-        const rotationStep = creature.rotationSpeed;
-        if (Math.abs(shortestAngle) <= rotationStep) {
-            creature.angle = creature.targetAngle;
-            creature.rotating = false;
-        } else {
-            creature.angle += Math.sign(shortestAngle) * rotationStep;
-            creature.angle = ((creature.angle + 2 * Math.PI) % (2 * Math.PI));
+        creature.bullets = creature.bullets.filter(b => {
+            return b.x >= 0 && b.x <= canvas.width && b.y >= 0 && b.y <= canvas.height;
+        });
+
+        let angleDiff = creature.targetAngle - creature.angle;
+        let shortestAngle = ((angleDiff + Math.PI) % (2 * Math.PI)) - Math.PI;
+        if (shortestAngle > Math.PI) shortestAngle -= 2 * Math.PI;
+        else if (shortestAngle < -Math.PI) shortestAngle += 2 * Math.PI;
+
+        if (creature.rotating) {
+            const rotationStep = creature.rotationSpeed;
+            if (Math.abs(shortestAngle) <= rotationStep) {
+                creature.angle = creature.targetAngle;
+                creature.rotating = false;
+            } else {
+                creature.angle += Math.sign(shortestAngle) * rotationStep;
+                creature.angle = ((creature.angle + 2 * Math.PI) % (2 * Math.PI));
+            }
+        }
+
+        if (debugMode) {
+            const debugText = `
+                Player: x=${player.x.toFixed(2)}, y=${player.y.toFixed(2)}
+                Creature Angle: ${creature.angle.toFixed(2)} rad
+                Target Angle: ${creature.targetAngle.toFixed(2)} rad
+                Shortest Angle: ${shortestAngle.toFixed(2)} rad
+            `;
+            debugInfo.textContent = debugText;
         }
     }
-
-    if (debugMode) {
-        const debugText = `
-            Player: x=${player.x.toFixed(2)}, y=${player.y.toFixed(2)}
-            Creature Angle: ${creature.angle.toFixed(2)} rad
-            Target Angle: ${creature.targetAngle.toFixed(2)} rad
-            Shortest Angle: ${shortestAngle.toFixed(2)} rad
-        `;
-        debugInfo.textContent = debugText;
-    }
-}
 
     function createDebris(type = 'player') {
         const source = type === 'player' ? player : creature;
@@ -522,67 +528,144 @@ function updateCreature() {
         ctx.fill();
     }
 
-    function drawPlayer() {
-        if (shipDestroyed || lives <= 0) {
-            debris.forEach(d => {
-                ctx.save();
-                ctx.translate(d.x, d.y);
-                ctx.rotate(d.angle);
-                ctx.beginPath();
-                ctx.moveTo(d.size, 0);
-                ctx.lineTo(-d.size / 2, -d.size / 2);
-                ctx.lineTo(-d.size / 2, d.size / 2);
-                ctx.strokeStyle = d.color;
-                ctx.stroke();
-                ctx.restore();
-            });
-        } else {
+function drawPlayer() {
+    if (shipDestroyed || lives <= 0) {
+        debris.forEach(d => {
             ctx.save();
-            ctx.translate(player.x, player.y);
-            ctx.rotate(player.angle + Math.PI / 2);
+            ctx.translate(d.x, d.y);
+            ctx.rotate(d.angle);
             ctx.beginPath();
-            ctx.moveTo(0, -player.size * 0.6);
-            ctx.lineTo(-player.size * 0.3, player.size * 0.3);
-            ctx.lineTo(-player.size * 0.1, player.size * 0.5);
-            ctx.lineTo(player.size * 0.1, player.size * 0.5);
-            ctx.lineTo(player.size * 0.3, player.size * 0.3);
-            ctx.closePath();
-            ctx.strokeStyle = 'white';
+            ctx.moveTo(d.size, 0);
+            ctx.lineTo(-d.size / 2, -d.size / 2);
+            ctx.lineTo(-d.size / 2, d.size / 2);
+            ctx.strokeStyle = d.color;
             ctx.stroke();
-
-            ctx.beginPath();
-            ctx.moveTo(-player.size * 0.3, player.size * 0.1);
-            ctx.lineTo(-player.size * 0.6, player.size * 0.1);
-            ctx.moveTo(player.size * 0.3, player.size * 0.1);
-            ctx.lineTo(player.size * 0.6, player.size * 0.1);
-            ctx.stroke();
-
-            if (keys.up) {
-                ctx.beginPath();
-                ctx.moveTo(-player.size * 0.1, player.size * 0.5);
-                ctx.lineTo(0, player.size * 0.8);
-                ctx.lineTo(player.size * 0.1, player.size * 0.5);
-                ctx.fillStyle = 'red';
-                ctx.fill();
-            }
-            if (keys.down) {
-                ctx.beginPath();
-                ctx.moveTo(-player.size * 0.1, player.size * 0.5);
-                ctx.lineTo(0, player.size * 0.8);
-                ctx.lineTo(player.size * 0.1, player.size * 0.5);
-                ctx.fillStyle = 'blue';
-                ctx.fill();
-            }
             ctx.restore();
+        });
+    } else {
+        ctx.save();
+        ctx.translate(player.x, player.y);
+        ctx.rotate(player.angle + Math.PI / 2); // Nose points up (adjusted for new orientation)
+
+        ctx.lineWidth = 1.5;
+
+        // Main rectangular body (vertical, center)
+        const bodyWidth = player.size * 0.4; // Width of the vertical rectangle
+        const bodyHeight = player.size * 0.8; // Height of the vertical rectangle
+        ctx.beginPath();
+        ctx.rect(-bodyWidth / 2, -bodyHeight / 2, bodyWidth, bodyHeight); // Vertical rectangle
+        ctx.fillStyle = '#2A2A2A'; // Dark gray body
+        ctx.fill();
+        ctx.strokeStyle = 'white'; // White outline
+        ctx.stroke();
+
+        // Red triangle at the front (pointing forward, tip upward)
+        ctx.beginPath();
+        ctx.moveTo(0, -bodyHeight / 1 - player.size * -0.05); // Base of triangle (lower point, extending upward)
+        ctx.lineTo(-player.size * 0.25, -player.size * 0.4); // Left point (forward and upward, smaller size)
+        ctx.lineTo(player.size * 0.25, -player.size * 0.4); // Right point (forward and upward, smaller size)
+        ctx.closePath();
+        ctx.fillStyle = 'red'; // Red tip
+        ctx.fill();
+        ctx.strokeStyle = 'white'; // White outline
+        ctx.stroke();
+
+        // Cross members on each side of the rectangle (horizontal)
+        const crossLength = player.size * 0.4; // Length of cross members
+        const crossThickness = player.size * 0.1; // Thickness of cross members
+
+        // Left cross member (horizontal)
+        ctx.beginPath();
+        ctx.rect(-bodyWidth / 2 - crossLength, -crossThickness / 2, crossLength, crossThickness); // Left horizontal cross
+        ctx.fillStyle = '#2A2A2A'; // Dark gray
+        ctx.fill();
+        ctx.strokeStyle = 'white'; // White outline
+        ctx.stroke();
+
+        // Right cross member (horizontal)
+        ctx.beginPath();
+        ctx.rect(bodyWidth / 2, -crossThickness / 2, crossLength, crossThickness); // Right horizontal cross
+        ctx.fillStyle = '#2A2A2A';
+        ctx.fill();
+        ctx.strokeStyle = 'white'; // White outline
+        ctx.stroke();
+
+        // Shorter rectangles (50% thinner than main body) on cross members
+        const shortRectWidth = bodyWidth * 0.25; // 50% of main body width
+        const shortRectHeight = bodyHeight * 0.5; // Half the height of main body for compactness
+
+        // Left upper short rectangle (attached to left cross)
+        ctx.beginPath();
+        ctx.rect(-bodyWidth / 2 - crossLength - shortRectWidth, -shortRectHeight / 2, shortRectWidth, shortRectHeight);
+        ctx.fillStyle = '#2A2A2A'; // Dark gray
+        ctx.fill();
+        ctx.strokeStyle = 'white'; // White outline
+        ctx.stroke();
+
+        // Left lower short rectangle (attached to left cross)
+        ctx.beginPath();
+        ctx.rect(-bodyWidth / 2 - crossLength - shortRectWidth, shortRectHeight / 2, shortRectWidth, shortRectHeight);
+        ctx.fillStyle = '#2A2A2A';
+        ctx.fill();
+        ctx.strokeStyle = 'white'; // White outline
+        ctx.stroke();
+
+        // Right upper short rectangle (attached to right cross)
+        ctx.beginPath();
+        ctx.rect(bodyWidth / 2 + crossLength, -shortRectHeight / 2, shortRectWidth, shortRectHeight);
+        ctx.fillStyle = '#2A2A2A';
+        ctx.fill();
+        ctx.strokeStyle = 'white'; // White outline
+        ctx.stroke();
+
+        // Right lower short rectangle (attached to right cross)
+        ctx.beginPath();
+        ctx.rect(bodyWidth / 2 + crossLength, shortRectHeight / 2, shortRectWidth, shortRectHeight);
+        ctx.fillStyle = '#2A2A2A';
+        ctx.fill();
+        ctx.strokeStyle = 'white'; // White outline
+        ctx.stroke();
+
+        // Thrust effects (dual rear thrusters, at the back of the rectangle)
+       if (keys.up) { // Forward thrust (from the back)
+            // Left exhaust
+            ctx.beginPath();
+            ctx.moveTo(-player.size * 0.2, player.size * 0.8);
+            ctx.lineTo(-player.size * 0.3, player.size * 1.2);
+            ctx.lineTo(-player.size * 0.1, player.size * 1.1);
+            ctx.fillStyle = '#FF4500'; // Orange-red flame
+            ctx.fill();
+            // Right exhaust
+            ctx.beginPath();
+            ctx.moveTo(player.size * 0.2, player.size * 0.8);
+            ctx.lineTo(player.size * 0.3, player.size * 1.2);
+            ctx.lineTo(player.size * 0.1, player.size * 1.1);
+            ctx.fillStyle = '#FF4500';
+            ctx.fill();
+        }
+        if (keys.down) { // Reverse thrust (small back jets, at the back of the rectangle)
+            ctx.beginPath();
+            ctx.moveTo(-player.size * 0.2, player.size * 0.8);
+            ctx.lineTo(0, player.size * 1.1);
+            ctx.lineTo(player.size * 0.2, player.size * 0.8);
+            ctx.fillStyle = '#4B0082'; // Deep purple energy
+            ctx.fill();
         }
 
-        ctx.fillStyle = 'yellow';
-        player.bullets.forEach(b => {
-            ctx.beginPath();
-            ctx.arc(b.x, b.y, b.size, 0, Math.PI * 2);
-            ctx.fill();
-        });
+
+        ctx.restore();
     }
+
+    // Bullets (fighter-style, can be customized)
+    ctx.fillStyle = '#FF4500'; // Orange-red shots
+    player.bullets.forEach(b => {
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.size, 0, Math.PI * 2);
+        ctx.fill();
+    });
+}
+
+
 
     function drawRings() {
         const centerX = canvas.width / 2;
