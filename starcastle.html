@@ -64,6 +64,32 @@
             display: none;
             text-shadow: 2px 2px 4px #000, -2px -2px 4px #fff; /* Black and white glow */
         }
+        #pauseOverlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        #pauseMessage {
+            font-family: Arial;
+            font-size: 60px;
+            color: #0ff; /* Cyan */
+            text-align: center;
+            text-shadow: 2px 2px 8px #00f, -2px -2px 8px #0ff;
+            margin-bottom: 20px;
+        }
+        #pauseInstructions {
+            font-family: Arial;
+            font-size: 24px;
+            color: white;
+            text-align: center;
+        }
         #finalScore {
             font-size: 30px;
             margin-top: 20px;
@@ -92,15 +118,19 @@
     </div>
     <div id="winMessage">Level Complete!</div>
     <div id="gameOverMessage">Game Over!<div id="finalScore"></div><div id="playAgain">Press P to play again.</div></div>
+    <div id="pauseOverlay">
+        <div id="pauseMessage">PAUSED</div>
+        <div id="pauseInstructions">Press ESC or P to resume</div>
+    </div>
     <div id="debugInfo"></div>
     <canvas id="gameCanvas"></canvas>
 
-    <audio id="thrustSound" src="/audio/thrust_sound.mp3"></audio>
-    <audio id="bulletSound" src="/audio/bullet_sound.mp3"></audio>
-    <audio id="swooshSound" src="/audio/swoosh_sound.mp3"></audio>
-    <audio id="bulletHitSound" src="/audio/bullet_hit_sound.mp3"></audio>
-    <audio id="playerExplosionSound" src="/audio/creature_explosion_sound.mp3"></audio>
-    <audio id="creatureExplosionSound" src="/audio/creature_explosion_sound.mp3"></audio>
+    <audio id="thrustSound" src="./audio/thrust_sound.mp3"></audio>
+    <audio id="bulletSound" src="./audio/bullet_sound.mp3"></audio>
+    <audio id="swooshSound" src="./audio/swoosh_sound.mp3"></audio>
+    <audio id="bulletHitSound" src="./audio/bullet_hit_sound.mp3"></audio>
+    <audio id="playerExplosionSound" src="./audio/creature_explosion_sound.mp3"></audio>
+    <audio id="creatureExplosionSound" src="./audio/creature_explosion_sound.mp3"></audio>
 
 <script>
     const canvas = document.getElementById('gameCanvas');
@@ -112,6 +142,7 @@
     const gameOverMessage = document.getElementById('gameOverMessage');
     const finalScoreDisplay = document.getElementById('finalScore');
     const debugInfo = document.getElementById('debugInfo');
+    const pauseOverlay = document.getElementById('pauseOverlay');
 
     const thrustSound = document.getElementById('thrustSound');
     const bulletSound = document.getElementById('bulletSound');
@@ -133,6 +164,7 @@
     let level = 1;
     let lives = 3;
     let gameRunning = true;
+    let gamePaused = false;
     let shipDestroyed = false;
     let debris = [];
     let explosions = [];
@@ -228,9 +260,17 @@
                 debugInfo.style.display = 'block';
                 break;
             case 'p':
+            case 'P':
                 if (!gameRunning && lives <= 0) {
                     resetGame();
                     gameLoop();
+                } else if (gameRunning && lives > 0) {
+                    togglePause();
+                }
+                break;
+            case 'Escape':
+                if (gameRunning && lives > 0) {
+                    togglePause();
                 }
                 break;
         }
@@ -262,11 +302,26 @@
         }
     });
 
+    function togglePause() {
+        gamePaused = !gamePaused;
+        if (gamePaused) {
+            pauseOverlay.style.display = 'flex';
+            // Pause all audio
+            if (thrustSound && !thrustSound.paused) {
+                thrustSound.pause();
+                thrustSound.currentTime = 0;
+            }
+        } else {
+            pauseOverlay.style.display = 'none';
+        }
+    }
+
     function resetGame() {
         score = 0;
         level = 1;
         lives = 3;
         gameRunning = true;
+        gamePaused = false;
         shipDestroyed = false;
         debris = [];
         explosions = [];
@@ -293,6 +348,7 @@
         updateDisplays();
         gameOverMessage.style.display = 'none';
         winMessage.style.display = 'none';
+        pauseOverlay.style.display = 'none';
         if (winTimer) clearTimeout(winTimer);
         winTimer = null;
         debugMode = false;
@@ -466,7 +522,7 @@
                 angle: Math.random() * Math.PI * 2,
                 size: Math.random() * (type === 'player' ? player.size / 2 : creature.size / 3) + 5,
                 life: type === 'player' ? 120 : 120,
-                color: type === 'player' ? 'white' : '#gray'
+                color: type === 'player' ? 'white' : 'gray'
             };
             if (type === 'creature') creatureDebris.push(debrisPiece);
             else debris.push(debrisPiece);
@@ -762,7 +818,7 @@ function drawPlayer() {
     }
 
     function drawCreatureDebris() {
-        ctx.fillStyle = '#gray';
+        ctx.fillStyle = 'gray';
         creatureDebris.forEach(d => {
             ctx.save();
             ctx.translate(d.x, d.y);
@@ -947,17 +1003,24 @@ function drawPlayer() {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         drawBackground();
-        updatePlayer();
-        updateCreature();
-        updateDebris();
-        updateCreatureDebris();
-        updateExplosions();
+
+        if (!gamePaused) {
+            updatePlayer();
+            updateCreature();
+            updateDebris();
+            updateCreatureDebris();
+            updateExplosions();
+        }
+
         drawRings();
         if (creature.alive) drawCreature();
         drawCreatureDebris();
         drawExplosions();
         drawPlayer();
-        checkCollisions();
+
+        if (!gamePaused) {
+            checkCollisions();
+        }
 
         requestAnimationFrame(gameLoop);
     }
